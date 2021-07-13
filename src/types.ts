@@ -1,6 +1,7 @@
 export type WebsocketSettings = {
     protocols?: string | Array<string>;
     url: string;
+    options: Record<string, string>;
 }
 
 export type Options = {

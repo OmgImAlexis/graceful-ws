@@ -1,13 +1,14 @@
 import {EventEmitter} from 'events';
 import WebSocket from 'ws';
-import type {Options, WebsocketSettings} from './types';
+import type {Options} from './types';
 
 export default class GracefulWebSocket extends EventEmitter {
     // Default options
     readonly #_options: Options = {
         ws: {
             protocols: [],
-            url: ''
+            url: '',
+            options: {}
         },
         pingInterval: 5000,
         pingTimeout: 2500,
@@ -25,19 +26,17 @@ export default class GracefulWebSocket extends EventEmitter {
     #_retryIntervalId?: ReturnType<typeof setInterval>;
 
     constructor(
-        url: (Partial<Options> & { ws: WebsocketSettings }) | string,
-        ...protocols: Array<string>
+        url: string,
+        protocols: Array<string>,
+        options: Record<string, string>
     ) {
         super();
 
-        if (typeof url === 'string') {
-            this.#_options.ws = {
-                url,
-                protocols
-            };
-        } else {
-            Object.assign(this.#_options, url);
-        }
+        this.#_options.ws = {
+            url,
+            protocols,
+            options
+        };
 
         if (!this.#_options.ws || !this.#_options.ws.url) {
             throw new Error('You must provide at least a websocket url.');
@@ -124,8 +123,8 @@ export default class GracefulWebSocket extends EventEmitter {
     }
 
     private start(): void {
-        const { pingInterval, pingTimeout, ws: { url, protocols } } = this.#_options;
-        const ws = this.#_websocket = new WebSocket(url, protocols || []);
+        const { pingInterval, pingTimeout, ws: { url, protocols, options } } = this.#_options;
+        const ws = this.#_websocket = new WebSocket(url, protocols || [], options);
 
         ws.addEventListener('open', () => {
             // Update connection state and dispatch event
@@ -150,7 +149,6 @@ export default class GracefulWebSocket extends EventEmitter {
         });
 
         ws.addEventListener('close', () => {
-
             // Clear timeouts
             if (this.#_disconnectionTimeoutId) clearTimeout(this.#_disconnectionTimeoutId);
             if (this.#_pingingTimeoutId) clearTimeout(this.#_pingingTimeoutId);
@@ -159,6 +157,10 @@ export default class GracefulWebSocket extends EventEmitter {
             if (!this.#_closed) {
                 this.restart();
             }
+        });
+
+        ws.on('unexpected-response', (request, response) => {
+            this.emit('unexpected-response', request, response);
         });
     }
 
