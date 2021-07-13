@@ -67,3 +67,5 @@ typings/
 .idea
 .psd
 lib
+
+dist
