@@ -19,7 +19,8 @@
         "url": "https://github.com/Simonwep/graceful-ws/issues"
     },
     "scripts": {
-        "build": "tsup ./src/graceful-ws.ts",
+        "build": "tsup ./src/graceful-ws.ts --dts",
+        "prepare": "npm run build",
         "pretest": "npm run build",
         "test": "jest --runInBand --testTimeout=20000",
         "lint": "eslint ./src/**/*.ts ./test/**/*.ts",
