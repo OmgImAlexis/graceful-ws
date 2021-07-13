@@ -10,8 +10,6 @@ export default class GracefulWebSocket extends EventEmitter {
             url: '',
             options: {}
         },
-        pingInterval: 5000,
-        pingTimeout: 2500,
         retryInterval: 1000
     };
 
@@ -22,13 +20,12 @@ export default class GracefulWebSocket extends EventEmitter {
 
     // Timing id's
     #_disconnectionTimeoutId?: ReturnType<typeof setTimeout>;
-    #_pingingTimeoutId?: ReturnType<typeof setInterval>;
     #_retryIntervalId?: ReturnType<typeof setInterval>;
 
     constructor(
         url: string,
         protocols: Array<string>,
-        options: Record<string, string>
+        options: Record<string, any>
     ) {
         super();
 
@@ -44,22 +41,6 @@ export default class GracefulWebSocket extends EventEmitter {
 
         this.#_websocket = null;
         this.start();
-    }
-
-    get pingInterval(): number {
-        return this.#_options.pingInterval;
-    }
-
-    set pingInterval(value: number) {
-        this.#_options.pingInterval = value;
-    }
-
-    get pingTimeout(): number {
-        return this.#_options.pingTimeout;
-    }
-
-    set pingTimeout(value: number) {
-        this.#_options.pingTimeout = value;
     }
 
     get retryInterval(): number {
@@ -104,39 +85,29 @@ export default class GracefulWebSocket extends EventEmitter {
     }
 
     public close(code?: number, reason?: string): void {
-        if (this.#_closed) {
-            throw new Error('Websocket already closed.');
-        } else if (this.#_websocket) {
-            this.#_closed = true;
+        if (this.#_closed) return;
+        if (!this.#_websocket) return;
+        // Mark this as closed by user
+        this.#_closed = true;
 
-            // Clear retry-interval if currently in a pending state
-            if (this.#_retryIntervalId) clearInterval(this.#_retryIntervalId);
+        // Clear retry-interval if currently in a pending state
+        if (this.#_retryIntervalId) clearTimeout(this.#_retryIntervalId);
 
-            // Close websocket
-            this.#_websocket.close(code, reason);
+        // Close websocket
+        this.#_websocket.close(code, reason);
 
-            // Dispatch close event
-            this.emit('killed');
-        } else {
-            throw new Error('Websocket isn\'t created yet.');
-        }
+        // Dispatch close event
+        this.emit('killed');
     }
 
-    private start(): void {
-        const { pingInterval, pingTimeout, ws: { url, protocols, options } } = this.#_options;
+    public start(): void {
+        const { ws: { url, protocols, options } } = this.#_options;
         const ws = this.#_websocket = new WebSocket(url, protocols || [], options);
 
         ws.addEventListener('open', () => {
             // Update connection state and dispatch event
             this.#_connected = true;
             this.emit('connected');
-
-            // Ping every 5s
-            this.#_pingingTimeoutId = setInterval(() => {
-                this.#_disconnectionTimeoutId = setTimeout(() => {
-                    ws.close();
-                }, pingTimeout);
-            }, pingInterval);
         });
 
         ws.addEventListener('message', e => {
@@ -148,19 +119,28 @@ export default class GracefulWebSocket extends EventEmitter {
             }
         });
 
-        ws.addEventListener('close', () => {
+        ws.on('close', (...args) => {
             // Clear timeouts
             if (this.#_disconnectionTimeoutId) clearTimeout(this.#_disconnectionTimeoutId);
-            if (this.#_pingingTimeoutId) clearTimeout(this.#_pingingTimeoutId);
+
+            console.log('ws:closed', ...args);
 
             // Restart if not manually closed
             if (!this.#_closed) {
+                console.log('closed automatically, restarting');
                 this.restart();
             }
         });
 
-        ws.on('unexpected-response', (request, response) => {
-            this.emit('unexpected-response', request, response);
+        ws.on('unexpected-response', (_req, res) => {
+            const code = res.statusCode;
+            const message = res.statusMessage;
+            this.emit('unexpected-response', code, message);
+            return false;
+        });
+
+        ws.on('error', error => {
+            this.emit('error', error);
         });
     }
 
@@ -174,8 +154,8 @@ export default class GracefulWebSocket extends EventEmitter {
         }
 
         // Check every second if internet is available
-        this.#_retryIntervalId = setInterval(() => {
-            if (this.#_retryIntervalId) clearInterval(this.#_retryIntervalId);
+        this.#_retryIntervalId = setTimeout(() => {
+            if (this.#_retryIntervalId) clearTimeout(this.#_retryIntervalId);
             this.start();
         }, this.#_options.retryInterval);
     }
