@@ -123,11 +123,8 @@ export default class GracefulWebSocket extends EventEmitter {
             // Clear timeouts
             if (this.#_disconnectionTimeoutId) clearTimeout(this.#_disconnectionTimeoutId);
 
-            console.log('ws:closed', ...args);
-
             // Restart if not manually closed
             if (!this.#_closed) {
-                console.log('closed automatically, restarting');
                 this.restart();
             }
         });
