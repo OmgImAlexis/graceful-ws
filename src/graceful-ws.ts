@@ -126,6 +126,8 @@ export default class GracefulWebSocket extends EventEmitter {
             // Restart if not manually closed
             if (!this.#_closed) {
                 this.restart();
+            } else {
+                this.#_connected = false; 
             }
         });
 
